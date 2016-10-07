@@ -159,22 +159,23 @@ void SolveJacobi(
 void SolvePartialSORFromSubmatrix(
 	int i,
 	const SUBMATRIX_TYPE_1& submatrix,
+	REAL* r,
 	REAL* x,
 	const REAL* b)
 {
-	x[i] = b[i];
+	r[i] = b[i];
 	if (!(i % submatrix_dim))
 	{
-		x[i] -= submatrix.m_upper_lower_diag * x[i + 1];
+		r[i] -= submatrix.m_upper_lower_diag * x[i + 1];
 	}
 	else if (!((i + 1) % submatrix_dim))
 	{
-		x[i] -= submatrix.m_upper_lower_diag * x[i - 1];
+		r[i] -= submatrix.m_upper_lower_diag * x[i - 1];
 	}
 	else
 	{
-		x[i] -= submatrix.m_upper_lower_diag * x[i + 1];
-		x[i] -= submatrix.m_upper_lower_diag * x[i - 1];
+		r[i] -= submatrix.m_upper_lower_diag * x[i + 1];
+		r[i] -= submatrix.m_upper_lower_diag * x[i - 1];
 	}
 }
 
@@ -184,6 +185,7 @@ void SolveSOR(
 	const SUBMATRIX_TYPE_1& b_2,
 	const SUBMATRIX_TYPE_1& b_3,
 	const SUBMATRIX_TYPE_2& d_1,
+	REAL* r,
 	REAL* x,
 	const REAL* b,
 	REAL w
@@ -197,24 +199,30 @@ void SolveSOR(
 	{
 		for (int i = 0; i < submatrix_dim; i++)
 		{
-			SolvePartialSORFromSubmatrix(i, b_1, x, b);
-			x[i] -= d_1.m_diag * x[i + submatrix_dim];
-			x[i] /= b_1.m_diag;
+			SolvePartialSORFromSubmatrix(i, b_1, r, x, b);
+			r[i] -= d_1.m_diag * x[i + submatrix_dim];
+			r[i] /= b_1.m_diag;
+			r[i] -= x[i];
+			x[i] += w * r[i];
 		}
 
 		for (int i = submatrix_dim; i < n - submatrix_dim; i++)
 		{
-			SolvePartialSORFromSubmatrix(i, b_2, x, b);
-			x[i] -= d_1.m_diag * x[i + submatrix_dim];
-			x[i] -= d_1.m_diag * x[i - submatrix_dim];
-			x[i] /= b_2.m_diag;
+			SolvePartialSORFromSubmatrix(i, b_2, r, x, b);
+			r[i] -= d_1.m_diag * x[i + submatrix_dim];
+			r[i] -= d_1.m_diag * x[i - submatrix_dim];
+			r[i] /= b_2.m_diag;
+			r[i] -= x[i];
+			x[i] += w * r[i];
 		}
 
 		for (int i = n - submatrix_dim; i < n; i++)
 		{
-			SolvePartialSORFromSubmatrix(i, b_3, x, b);
-			x[i] -= d_1.m_diag * x[i - submatrix_dim];
-			x[i] /= b_3.m_diag;
+			SolvePartialSORFromSubmatrix(i, b_3, r, x, b);
+			r[i] -= d_1.m_diag * x[i - submatrix_dim];
+			r[i] /= b_3.m_diag;
+			r[i] -= x[i];
+			x[i] += w * r[i];
 		}
 	}
 }
@@ -225,10 +233,11 @@ void SolveGaussSeidel(
 	const SUBMATRIX_TYPE_1& b_2,
 	const SUBMATRIX_TYPE_1& b_3,
 	const SUBMATRIX_TYPE_2& d_1,
+	REAL* r,
 	REAL* x,
 	const REAL* b)
 {
-	SolveSOR(n, b_1, b_2, b_3, d_1, x, b, 1.0);
+	SolveSOR(n, b_1, b_2, b_3, d_1, r, x, b, 1.0);
 }
 
 
@@ -236,6 +245,9 @@ void solveForN(int n)
 {
 	REAL* x = new REAL[n];
 	memset(x, 0, sizeof(REAL) * n);
+	
+	REAL* r = new REAL[n];
+	memset(r, 0, sizeof(REAL) * n);
 
 	REAL* x_1 = new REAL[n];
 	for (int i = 0; i < n; i++)
@@ -266,10 +278,10 @@ void solveForN(int n)
 	}
 
 	memset(x, 0, sizeof(REAL) * n);
-	REAL w = 1;
+	REAL w = 1.4;
 	for (int i = 0; i < 10; i++)
 	{
-		SolveSOR(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, x, b, w);
+		SolveSOR(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, r, x, b, w);
 	}
 	printf_s("SOR(w=%f):\n", w);
 	for (int i = 0; i < n; i++)
@@ -278,6 +290,7 @@ void solveForN(int n)
 	}
 
 	delete[] x;
+	delete[] r;
 	delete[] x_1;
 	delete[] b;
 }
