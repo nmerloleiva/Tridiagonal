@@ -36,12 +36,38 @@ bool validateN(int n)
 	n > submatrix_dim;
 }
 
-bool ComputeM_k(int n, REAL* M_k, REAL* X_k, REAL* X_0, REAL* X, int k)
+bool ComputeF_k(int n, int k, REAL* F_k, REAL* X_k, REAL* X_0, REAL* X)
 {
+	REAL infiniteNormNum = 0;
+	REAL infiniteNormDen = 0;
+	for (int i = 0; i < n; i++)
+	{
+		REAL absDen = abs(X_0[i] - X[i]); // module
+		if (absDen > infiniteNormDen) // max
+		{
+			infiniteNormDen = absDen;
+		}
 
+		REAL absNum = abs(X_k[i] - X[i]); // module
+		if (absNum > infiniteNormNum) // max
+		{
+			infiniteNormNum = absNum;
+		}
+	}
+
+	if (infiniteNormDen > 0)
+	{
+		*F_k = log(infiniteNormNum / infiniteNormDen);
+		return true;
+	}
+	else
+	{
+		printf_s("Invalid argument at ComputeF_k: X_k can't be zero.\n", n);
+		return false;
+	}
 }
 
-bool ComputeR_k(int n, REAL* R_k, REAL* X_k, REAL* X_k_minus_1)
+bool ComputeR_k(int n, REAL* R_k, const REAL* X_k, const REAL* X_k_minus_1)
 {
 	REAL infiniteNormNum = 0;
 	REAL infiniteNormDen = 0;
@@ -91,6 +117,14 @@ void ComputePartialBFromSubmatrix(
 	{
 		b[i] += submatrix.m_upper_lower_diag * x[i + 1];
 		b[i] += submatrix.m_upper_lower_diag * x[i - 1];
+	}
+}
+
+void Fill(int n, REAL* X, REAL value)
+{
+	for (int i = 0; i < n; i++)
+	{
+		X[i] = value;
 	}
 }
 
@@ -272,70 +306,104 @@ bool SolveSOR(
 	}
 }
 
-void SolveGaussSeidel(
-	int n,
-	const SUBMATRIX_TYPE_1& b_1,
-	const SUBMATRIX_TYPE_1& b_2,
-	const SUBMATRIX_TYPE_1& b_3,
-	const SUBMATRIX_TYPE_2& d_1,
-	REAL* r,
-	REAL* X_k,
-	const REAL* b)
+void SolveJacobiForN(int n, const REAL* B, const REAL* X)
 {
-	SolveSOR(n, b_1, b_2, b_3, d_1, r, X_k, b, 1.0);
+	REAL* x_in = new REAL[n];
+	memset(x_in, 0, sizeof(REAL) * n);
+
+	REAL* x_out = new REAL[n];
+	memset(x_out, 0, sizeof(REAL) * n);
+
+	REAL R_k = REAL_MAX;
+	int stepCount = 0;
+	while (R_k > rtol)
+	{
+		memcpy_s(x_in, sizeof(REAL) * n, x_out, sizeof(REAL) * n);
+		SolveJacobi(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, x_in, x_out, B);
+		ComputeR_k(n, &R_k, X, x_in);
+		stepCount++;
+	}
+
+	printf_s("Solve Jacobi: n=%d steps=%d rtol=%f\n", n, stepCount, R_k);
+
+	delete[] x_in;
+	delete[] x_out;
 }
 
-
-void solveForN(int n)
+void SolveGaussSeidelForN(int n, const REAL* B, const REAL* X)
 {
-	REAL* x = new REAL[n];
-	memset(x, 0, sizeof(REAL) * n);
+	REAL w = 1.0;
 
 	REAL* x_in = new REAL[n];
 	memset(x_in, 0, sizeof(REAL) * n);
 
+	REAL* x_out = new REAL[n];
+	memset(x_out, 0, sizeof(REAL) * n);
+
 	REAL* r = new REAL[n];
 	memset(r, 0, sizeof(REAL) * n);
 
-	REAL* x_1 = new REAL[n];
-	for (int i = 0; i < n; i++)
+	REAL R_k = REAL_MAX;
+	int stepCount = 0;
+	while (R_k > rtol)
 	{
-		x_1[i] = 1;
+		memcpy_s(x_in, sizeof(REAL) * n, x_out, sizeof(REAL) * n);
+		SolveSOR(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, r, x_out, B, w);
+		ComputeR_k(n, &R_k, x_out, x_in);
+		stepCount++;
 	}
 
-	REAL* b = new REAL[n];
-	memset(b, 0, sizeof(REAL) * n);
-	ComputeB(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, x_1, b);
+	printf_s("Solve Gauss Seidel: n=%d steps=%d rtol=%f\n", n, stepCount, R_k);
+
+	delete[] x_in;
+	delete[] x_out;
+	delete[] r;
+}
+
+void SolveSORForN(int n, const REAL* B, const REAL* X, REAL w)
+{
+	REAL* x_in = new REAL[n];
+	memset(x_in, 0, sizeof(REAL) * n);
+
+	REAL* x_out = new REAL[n];
+	memset(x_out, 0, sizeof(REAL) * n);
+	
+	REAL* r = new REAL[n];
+	memset(r, 0, sizeof(REAL) * n);
 
 	REAL R_k = REAL_MAX;
-	int jacobiStepCount = 0;
+	int stepCount = 0;
 	while (R_k > rtol)
 	{
-		memcpy_s(x_in, sizeof(REAL) * n, x, sizeof(REAL) * n);
-		SolveJacobi(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, x_in, x, b);
-		ComputeR_k(n, &R_k, x, x_in);
-		jacobiStepCount++;
+		memcpy_s(x_in, sizeof(REAL) * n, x_out, sizeof(REAL) * n);
+		SolveSOR(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, r, x_out, B, w);
+		ComputeR_k(n, &R_k, x_out, x_in);
+		stepCount++;
 	}
-	printf_s("JACOBI n=%d steps=%d rtol=%f:\n", n, jacobiStepCount, R_k);
 
-	memset(x, 0, sizeof(REAL) * n);
-	R_k = REAL_MAX;
-	REAL w = 1;
-	int sorStepCount = 0;
-	while (R_k > rtol)
-	{
-		memcpy_s(x_in, sizeof(REAL) * n, x, sizeof(REAL) * n);
-		SolveSOR(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, r, x, b, w);
-		ComputeR_k(n, &R_k, x, x_in);
-		sorStepCount++;
-	}
-	printf_s("SOR(w=%f) n=%d steps=%d rtol=%f:\n", w, n, sorStepCount, R_k);
+	printf_s("Solve SOR: n=%d steps=%d rtol=%f w=%f\n", n, stepCount, R_k, w);
 
-	delete[] x;
-	delete[] r;
-	delete[] x_1;
 	delete[] x_in;
-	delete[] b;
+	delete[] x_out;
+	delete[] r;
+}
+
+void solveForN(int n)
+{
+	REAL* X = new REAL[n];
+	memset(X, 0, sizeof(REAL) * n);
+	Fill(n, X, 1);
+
+	REAL* B = new REAL[n];
+	memset(B, 0, sizeof(REAL) * n);
+	ComputeB(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, X, B);
+
+	SolveJacobiForN(n, B, X);
+
+	SolveGaussSeidelForN(n, B, X);
+
+	delete[] X;
+	delete[] B;
 }
 
 int main()
