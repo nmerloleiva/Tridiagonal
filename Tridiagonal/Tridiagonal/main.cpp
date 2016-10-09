@@ -1,6 +1,8 @@
 
 #include <memory>
 #include <limits.h>
+#include <vector>
+#include <map>
 
 // Precision type abstraction.
 typedef double REAL; 
@@ -29,14 +31,77 @@ SUBMATRIX_TYPE_2 submatrix_D_1 = { -1 };
 const int submatrix_dim = 3;
 const double rtol = 0.001;
 
+void Fill(int n, REAL* X, REAL value)
+{
+	for (int i = 0; i < n; i++)
+	{
+		X[i] = value;
+	}
+}
+
+REAL InnerProduct(int n, const REAL* X, const REAL* Y)
+{
+	REAL result = 0;
+	for (int i = 0; i < n; i++)
+	{
+		result += X[i] + Y[i];
+	}
+	return result;
+}
+
+void SolveLeastSquared(const std::map<REAL, REAL>& values, REAL* m, REAL* b)
+{
+	size_t size = values.size();
+	REAL* phi_0 = new REAL[size];
+	REAL* phi_1 = new REAL[size];
+	REAL* f = new REAL[size];
+
+	// Set phi_0
+	Fill(size, phi_0, 1);
+
+	// Set phi_1
+	size_t pairIndex1 = 0;
+	for each (auto pair in values)
+	{
+		phi_1[pairIndex1] = pair.first;
+		pairIndex1++;
+	}
+
+	// Set f
+	size_t pairIndex2 = 0;
+	for each (auto pair in values)
+	{
+		f[pairIndex2] = pair.second;
+		pairIndex2++;
+	}
+
+	// Compute SEL
+	REAL phi_0_phi_0 = InnerProduct(size, phi_0, phi_0);
+	REAL phi_0_phi_1 = InnerProduct(size, phi_0, phi_1);
+	REAL phi_1_phi_1 = InnerProduct(size, phi_1, phi_1);
+	REAL phi_1_phi_0 = InnerProduct(size, phi_1, phi_0);
+	REAL phi_f_phi_0 = InnerProduct(size, f, phi_0);
+	REAL phi_f_phi_1 = InnerProduct(size, f, phi_1);
+
+	// Solve SEL
+	REAL cramerDen = (phi_0_phi_0 * phi_1_phi_1 - phi_1_phi_0 * phi_0_phi_1);
+	*b = (phi_f_phi_0 * phi_1_phi_1 - phi_1_phi_0 * phi_f_phi_1) / cramerDen;
+	*m = (phi_0_phi_0 * phi_f_phi_1 - phi_f_phi_0 * phi_0_phi_1) / cramerDen;
+
+	// Clean up
+	delete[] phi_0;
+	delete[] phi_1;
+	delete[] f;
+}
+
 // Returns true if n is valid matrix dim.
-bool validateN(int n)
+bool ValidateN(int n)
 {
 	return !(n % submatrix_dim) &&
 	n > submatrix_dim;
 }
 
-bool ComputeF_k(int n, int k, REAL* F_k, REAL* X_k, REAL* X_0, REAL* X)
+bool ComputeF_k(int n, int k, REAL* F_k, const REAL* X_k, const REAL* X_0, const REAL* X)
 {
 	REAL infiniteNormNum = 0;
 	REAL infiniteNormDen = 0;
@@ -120,14 +185,6 @@ void ComputePartialBFromSubmatrix(
 	}
 }
 
-void Fill(int n, REAL* X, REAL value)
-{
-	for (int i = 0; i < n; i++)
-	{
-		X[i] = value;
-	}
-}
-
 bool ComputeB(
 	int n,
 	const SUBMATRIX_TYPE_1& b_1,
@@ -138,7 +195,7 @@ bool ComputeB(
 	REAL* b
 	)
 {
-	if (!validateN(n))
+	if (!ValidateN(n))
 	{
 		printf_s("Invalid argument n=%d at ComputeB.\n", n);
 		return false;
@@ -201,7 +258,7 @@ bool SolveJacobi(
 	const REAL* b
 	)
 {
-	if (!validateN(n))
+	if (!ValidateN(n))
 	{
 		printf_s("Invalid argument n=%d at SolveJacobi.\n", n);
 		return false;
@@ -268,7 +325,7 @@ bool SolveSOR(
 	REAL w
 	)
 {
-	if (!validateN(n))
+	if (!ValidateN(n))
 	{
 		printf_s("Invalid argument n=%d at SolveJacobi.\n", n);
 		return false;
@@ -306,7 +363,7 @@ bool SolveSOR(
 	}
 }
 
-void SolveJacobiForN(int n, const REAL* B, const REAL* X)
+void SolveJacobiForN(int n, const REAL* B, const REAL* X, const REAL* X_0)
 {
 	REAL* x_in = new REAL[n];
 	memset(x_in, 0, sizeof(REAL) * n);
@@ -314,23 +371,35 @@ void SolveJacobiForN(int n, const REAL* B, const REAL* X)
 	REAL* x_out = new REAL[n];
 	memset(x_out, 0, sizeof(REAL) * n);
 
+	std::map<REAL, REAL> ComputedF_k;
+
 	REAL R_k = REAL_MAX;
 	int stepCount = 0;
 	while (R_k > rtol)
 	{
-		memcpy_s(x_in, sizeof(REAL) * n, x_out, sizeof(REAL) * n);
+		memcpy_s (x_in, sizeof(REAL) * n, x_out, sizeof(REAL) * n);
 		SolveJacobi(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, x_in, x_out, B);
-		ComputeR_k(n, &R_k, X, x_in);
+		ComputeR_k(n, &R_k, x_out, x_in);
 		stepCount++;
+
+		REAL F_k = 0;
+		ComputeF_k(n, stepCount, &F_k, x_out, X_0, X);
+		ComputedF_k.emplace(std::make_pair(stepCount, F_k));
 	}
 
-	printf_s("Solve Jacobi: n=%d steps=%d rtol=%f\n", n, stepCount, R_k);
+	// Estimate spectral radius
+	REAL F_m = 0; // log(ro)
+	REAL F_b = 0;
+	SolveLeastSquared(ComputedF_k, &F_m, &F_b);
+	REAL ro = pow(10, F_m);
 
+	printf_s("Solve Jacobi: n=%d steps=%d rtol=%f ro=%f\n", n, stepCount, R_k, ro);
+	 
 	delete[] x_in;
 	delete[] x_out;
 }
 
-void SolveGaussSeidelForN(int n, const REAL* B, const REAL* X)
+void SolveGaussSeidelForN(int n, const REAL* B, const REAL* X, const REAL* X_0)
 {
 	REAL w = 1.0;
 
@@ -342,6 +411,8 @@ void SolveGaussSeidelForN(int n, const REAL* B, const REAL* X)
 
 	REAL* r = new REAL[n];
 	memset(r, 0, sizeof(REAL) * n);
+	
+	std::map<REAL, REAL> ComputedF_k;
 
 	REAL R_k = REAL_MAX;
 	int stepCount = 0;
@@ -351,16 +422,26 @@ void SolveGaussSeidelForN(int n, const REAL* B, const REAL* X)
 		SolveSOR(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, r, x_out, B, w);
 		ComputeR_k(n, &R_k, x_out, x_in);
 		stepCount++;
+
+		REAL F_k = 0;
+		ComputeF_k(n, stepCount, &F_k, x_out, X_0, X);
+		ComputedF_k.emplace(std::make_pair(stepCount, F_k));
 	}
 
-	printf_s("Solve Gauss Seidel: n=%d steps=%d rtol=%f\n", n, stepCount, R_k);
+	// Estimate spectral radius
+	REAL F_m = 0; // log(ro)
+	REAL F_b = 0;
+	SolveLeastSquared(ComputedF_k, &F_m, &F_b);
+	REAL ro = pow(10, F_m);
+
+	printf_s("Solve Gauss Seidel: n=%d steps=%d rtol=%f ro=%f\n", n, stepCount, R_k, ro);
 
 	delete[] x_in;
 	delete[] x_out;
 	delete[] r;
 }
 
-void SolveSORForN(int n, const REAL* B, const REAL* X, REAL w)
+void SolveSORForN(int n, const REAL* B, const REAL* X, const REAL* X_0, REAL w)
 {
 	REAL* x_in = new REAL[n];
 	memset(x_in, 0, sizeof(REAL) * n);
@@ -371,6 +452,8 @@ void SolveSORForN(int n, const REAL* B, const REAL* X, REAL w)
 	REAL* r = new REAL[n];
 	memset(r, 0, sizeof(REAL) * n);
 
+	std::map<REAL, REAL> ComputedF_k;
+
 	REAL R_k = REAL_MAX;
 	int stepCount = 0;
 	while (R_k > rtol)
@@ -379,9 +462,19 @@ void SolveSORForN(int n, const REAL* B, const REAL* X, REAL w)
 		SolveSOR(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, r, x_out, B, w);
 		ComputeR_k(n, &R_k, x_out, x_in);
 		stepCount++;
+
+		REAL F_k = 0;
+		ComputeF_k(n, stepCount, &F_k, x_out, X_0, X);
+		ComputedF_k.emplace(std::make_pair(stepCount, F_k));
 	}
 
-	printf_s("Solve SOR: n=%d steps=%d rtol=%f w=%f\n", n, stepCount, R_k, w);
+	// Estimate spectral radius
+	REAL F_m = 0; // log(ro)
+	REAL F_b = 0;
+	SolveLeastSquared(ComputedF_k, &F_m, &F_b);
+	REAL ro = pow(10, F_m);
+
+	printf_s("Solve SOR: n=%d steps=%d rtol=%f ro=%f w=%f\n", n, stepCount, R_k, ro, w);
 
 	delete[] x_in;
 	delete[] x_out;
@@ -391,18 +484,24 @@ void SolveSORForN(int n, const REAL* B, const REAL* X, REAL w)
 void solveForN(int n)
 {
 	REAL* X = new REAL[n];
-	memset(X, 0, sizeof(REAL) * n);
 	Fill(n, X, 1);
 
+	REAL* X_0 = new REAL[n];
+	Fill(n, X_0, 0);
+
 	REAL* B = new REAL[n];
-	memset(B, 0, sizeof(REAL) * n);
 	ComputeB(n, submatrix_B_1, submatrix_B_2, submatrix_B_3, submatrix_D_1, X, B);
 
-	SolveJacobiForN(n, B, X);
+	SolveJacobiForN(n, B, X, X_0);
 
-	SolveGaussSeidelForN(n, B, X);
+	SolveGaussSeidelForN(n, B, X, X_0);
+
+	// TODO: use optimal W
+	//SolveSORForN(n, B, X, X_0, 1.4);
+	//SolveSORForN(n, B, X, X_0, 1.037697733);
 
 	delete[] X;
+	delete[] X_0;
 	delete[] B;
 }
 
