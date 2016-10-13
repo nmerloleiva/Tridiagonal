@@ -1,3 +1,12 @@
+/*
+**	Universidad de Buenos Aires
+**	Facultad de Ingeniería
+**	75.12 Análisis Numérico I
+**	Trabajo Práctico I
+**
+**	Merlo Leiva Nahuel
+**	Padrón 92115
+*/
 
 #include <memory>
 #include <limits.h>
@@ -122,7 +131,7 @@ bool ComputeF_k(int n, int k, REAL* F_k, const REAL* X_k, const REAL* X_0, const
 
 	if (infiniteNormDen > 0)
 	{
-		*F_k = log(infiniteNormNum / infiniteNormDen);
+		*F_k = log10(infiniteNormNum / infiniteNormDen);
 		return true;
 	}
 	else
@@ -393,13 +402,13 @@ void SolveJacobiForN(int n, const REAL* B, const REAL* X, const REAL* X_0)
 	SolveLeastSquared(ComputedF_k, &F_m, &F_b);
 	REAL ro = pow(10, F_m);
 
-	printf_s("Solve Jacobi: n=%d steps=%d rtol=%f ro=%f\n", n, stepCount, R_k, ro);
+	printf_s("Jacobi\n n=%d\t steps=%d\t rtol=%f\t ro=%f\n", n, stepCount, R_k, ro);
 	 
 	delete[] x_in;
 	delete[] x_out;
 }
 
-void SolveGaussSeidelForN(int n, const REAL* B, const REAL* X, const REAL* X_0)
+void SolveGaussSeidelForN(int n, const REAL* B, const REAL* X, const REAL* X_0, REAL* ro)
 {
 	REAL w = 1.0;
 
@@ -432,9 +441,9 @@ void SolveGaussSeidelForN(int n, const REAL* B, const REAL* X, const REAL* X_0)
 	REAL F_m = 0; // log(ro)
 	REAL F_b = 0;
 	SolveLeastSquared(ComputedF_k, &F_m, &F_b);
-	REAL ro = pow(10, F_m);
+	*ro = pow(10, F_m);
 
-	printf_s("Solve Gauss Seidel: n=%d steps=%d rtol=%f ro=%f\n", n, stepCount, R_k, ro);
+	printf_s("Gauss Seidel\n n=%d\t steps=%d\t rtol=%f\t ro=%f\n", n, stepCount, R_k, *ro);
 
 	delete[] x_in;
 	delete[] x_out;
@@ -474,14 +483,14 @@ void SolveSORForN(int n, const REAL* B, const REAL* X, const REAL* X_0, REAL w)
 	SolveLeastSquared(ComputedF_k, &F_m, &F_b);
 	REAL ro = pow(10, F_m);
 
-	printf_s("Solve SOR: n=%d steps=%d rtol=%f ro=%f w=%f\n", n, stepCount, R_k, ro, w);
+	printf_s("SOR\n n=%d\t steps=%d\t rtol=%f\t ro=%f\t w=%f\n", n, stepCount, R_k, ro, w);
 
 	delete[] x_in;
 	delete[] x_out;
 	delete[] r;
 }
 
-void solveForN(int n)
+void SolveForN(int n)
 {
 	REAL* X = new REAL[n];
 	Fill(n, X, 1);
@@ -494,11 +503,11 @@ void solveForN(int n)
 
 	SolveJacobiForN(n, B, X, X_0);
 
-	SolveGaussSeidelForN(n, B, X, X_0);
+	REAL gsRo = 0;
+	SolveGaussSeidelForN(n, B, X, X_0, &gsRo);
 
-	// TODO: use optimal W
-	//SolveSORForN(n, B, X, X_0, 1.4);
-	//SolveSORForN(n, B, X, X_0, 1.037697733);
+	REAL optimalW = 2 / (1 + sqrt(1 - gsRo));
+	SolveSORForN(n, B, X, X_0, optimalW);
 
 	delete[] X;
 	delete[] X_0;
@@ -507,10 +516,12 @@ void solveForN(int n)
 
 int main()
 {
-	solveForN(submatrix_dim * 2);
-	solveForN(submatrix_dim * 3);
-	solveForN(submatrix_dim * 4);
-	solveForN(submatrix_dim * 10);
+	printf("Merlo Leiva Nahuel\n");
+	printf("Padrón 92115\n");
+	SolveForN(submatrix_dim * 2);
+	SolveForN(submatrix_dim * 3);
+	SolveForN(submatrix_dim * 4);
+	SolveForN(submatrix_dim * 10);
 	getchar();
 	return 0;
 }
