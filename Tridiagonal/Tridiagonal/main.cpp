@@ -3,6 +3,8 @@
 **	Facultad de Ingeniería
 **	75.12 Análisis Numérico I
 **	Trabajo Práctico I
+**	Curso 3
+**	13/10/2016
 **
 **	Merlo Leiva Nahuel
 **	Padrón 92115
@@ -12,6 +14,8 @@
 #include <limits.h>
 #include <vector>
 #include <map>
+#include <fstream>
+#include <string>
 
 // Precision type abstraction.
 typedef double REAL; 
@@ -53,7 +57,7 @@ REAL InnerProduct(int n, const REAL* X, const REAL* Y)
 	REAL result = 0;
 	for (int i = 0; i < n; i++)
 	{
-		result += X[i] + Y[i];
+		result += X[i] * Y[i];
 	}
 	return result;
 }
@@ -372,6 +376,14 @@ bool SolveSOR(
 	}
 }
 
+bool replace(std::string& str, const std::string& from, const std::string& to) {
+	size_t start_pos = str.find(from);
+	if (start_pos == std::string::npos)
+		return false;
+	str.replace(start_pos, from.length(), to);
+	return true;
+}
+
 void SolveJacobiForN(int n, const REAL* B, const REAL* X, const REAL* X_0)
 {
 	REAL* x_in = new REAL[n];
@@ -403,6 +415,23 @@ void SolveJacobiForN(int n, const REAL* B, const REAL* X, const REAL* X_0)
 	REAL ro = pow(10, F_m);
 
 	printf_s("Jacobi\n n=%d\t steps=%d\t rtol=%f\t ro=%f\n", n, stepCount, R_k, ro);
+	for each (auto f_k in ComputedF_k)
+	{
+		printf_s("F*(%f)=%f\n", f_k.first, f_k.second);
+
+		std::fstream file;
+		std::string fileName;
+		fileName.append("J");
+		fileName.append(std::to_string(n));
+		fileName.append(".txt");
+		file.open(fileName, std::ios_base::out | std::ios_base::app);
+		auto str = std::to_string(f_k.second);
+		replace(str, ".", ",");
+		str.append("\n");
+		file.write(str.c_str(), str.size());
+		file.close();
+	}
+	printf_s("\n");
 	 
 	delete[] x_in;
 	delete[] x_out;
@@ -444,6 +473,23 @@ void SolveGaussSeidelForN(int n, const REAL* B, const REAL* X, const REAL* X_0, 
 	*ro = pow(10, F_m);
 
 	printf_s("Gauss Seidel\n n=%d\t steps=%d\t rtol=%f\t ro=%f\n", n, stepCount, R_k, *ro);
+	for each (auto f_k in ComputedF_k)
+	{
+		printf_s("F*(%f)=%f\n", f_k.first, f_k.second);
+
+		std::fstream file;
+		std::string fileName;
+		fileName.append("GS");
+		fileName.append(std::to_string(n));
+		fileName.append(".txt");
+		file.open(fileName, std::ios_base::out | std::ios_base::app);
+		auto str = std::to_string(f_k.second);
+		replace(str, ".", ",");
+		str.append("\n");
+		file.write(str.c_str(), str.size());
+		file.close();
+	}
+	printf_s("\n");
 
 	delete[] x_in;
 	delete[] x_out;
@@ -484,6 +530,23 @@ void SolveSORForN(int n, const REAL* B, const REAL* X, const REAL* X_0, REAL w)
 	REAL ro = pow(10, F_m);
 
 	printf_s("SOR\n n=%d\t steps=%d\t rtol=%f\t ro=%f\t w=%f\n", n, stepCount, R_k, ro, w);
+	for each (auto f_k in ComputedF_k)
+	{
+		printf_s("F*(%f)=%f\n", f_k.first, f_k.second);
+
+		std::fstream file;
+		std::string fileName;
+		fileName.append("SOR");
+		fileName.append(std::to_string(n));
+		fileName.append(".txt");
+		file.open(fileName, std::ios_base::out | std::ios_base::app);
+		auto str = std::to_string(f_k.second);
+		replace(str, ".", ",");
+		str.append("\n");
+		file.write(str.c_str(), str.size());
+		file.close();
+	}
+	printf_s("\n");
 
 	delete[] x_in;
 	delete[] x_out;
